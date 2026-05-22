@@ -52,6 +52,35 @@ def test_recipes():
     assert egg_missing["missing_quantity"] == 1.0
     print("Verified partial ingredient availability logic")
 
+    # 5. Cook recipe (Failure expected)
+    response = requests.post(f"{BASE_URL}/recipes/{recipe_id}/cook")
+    assert response.status_code == 400
+    assert "Insufficient ingredients" in response.json()["detail"]["message"]
+    print("Verified cook recipe failure when ingredients are missing")
+
+    # 6. Add remaining ingredients and cook (Success expected)
+    requests.post(
+        f"{BASE_URL}/item",
+        json={"name": "Eggs", "quantity": 5, "unit": "pieces", "category": "Dairy"},
+    )
+    requests.post(
+        f"{BASE_URL}/item",
+        json={"name": "Flour", "quantity": 1000, "unit": "grams", "category": "Pantry"},
+    )
+
+    response = requests.post(f"{BASE_URL}/recipes/{recipe_id}/cook")
+    assert response.status_code == 200
+    assert "Successfully cooked" in response.json()["message"]
+    print("Verified successful recipe cooking")
+
+    # 7. Verify inventory deduction
+    # We had 1.0 + 5.0 eggs = 6.0. Recipe used 2.0. Should have 4.0 left.
+    response = requests.get(f"{BASE_URL}/items")
+    items = response.json()
+    total_eggs = sum(item["quantity"] for item in items if item["name"] == "Eggs")
+    assert total_eggs == 4.0
+    print("Verified inventory correctly deducted after cooking")
+
 
 if __name__ == "__main__":
     test_recipes()
