@@ -7,5 +7,6 @@ requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.136.1",
     "requests>=2.34.2",
+    "ruff>=0.15.14",
     "uvicorn>=0.47.0",
 ]

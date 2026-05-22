@@ -1,11 +1,11 @@
 from datetime import date
-from enum import Enum
+from enum import StrEnum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
-class Category(str, Enum):
+class Category(StrEnum):
     DAIRY = "Dairy"
     PRODUCE = "Produce"
     MEAT = "Meat"
