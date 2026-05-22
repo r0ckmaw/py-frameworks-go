@@ -6,6 +6,7 @@ BASE_URL = "http://localhost:8000"
 
 
 def test_crud():
+    print("Testing CRUD...")
     # 1. Create an item
     item_data = {
         "name": "Milk",
@@ -19,7 +20,6 @@ def test_crud():
     item = response.json()
     assert item["name"] == "Milk"
     assert item["category"] == "Dairy"
-
     item_id = item["id"]
     print(f"Created item with ID: {item_id}")
 
@@ -54,5 +54,33 @@ def test_crud():
     print("Verified item deletion (404)")
 
 
+def test_filtering():
+    print("Testing filtering...")
+    # Add two items in different categories
+    requests.post(
+        f"{BASE_URL}/items/",
+        json={"name": "Apples", "quantity": 5, "unit": "pieces", "category": "Produce"},
+    )
+    requests.post(
+        f"{BASE_URL}/items/",
+        json={"name": "Cheese", "quantity": 1, "unit": "block", "category": "Dairy"},
+    )
+
+    # Filter by Produce
+    response = requests.get(f"{BASE_URL}/items/", params={"category": "Produce"})
+    items = response.json()
+    assert any(item["name"] == "Apples" for item in items)
+    assert all(item["category"] == "Produce" for item in items)
+    print("Verified Produce filtering")
+
+    # Filter by Dairy
+    response = requests.get(f"{BASE_URL}/items/", params={"category": "Dairy"})
+    items = response.json()
+    assert any(item["name"] == "Cheese" for item in items)
+    assert all(item["category"] == "Dairy" for item in items)
+    print("Verified Dairy filtering")
+
+
 if __name__ == "__main__":
     test_crud()
+    test_filtering()

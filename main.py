@@ -1,8 +1,8 @@
-from typing import List
+from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException
 
-from models import InventoryItem, InventoryItemCreate
+from models import Category, InventoryItem, InventoryItemCreate
 
 app = FastAPI(title="Household Manager")
 
@@ -26,7 +26,9 @@ async def create_item(item: InventoryItemCreate):
 
 
 @app.get("/items/", response_model=List[InventoryItem])
-async def get_items():
+async def get_items(category: Optional[Category] = None):
+    if category:
+        return [item for item in inventory_db if item.category == category]
     return inventory_db
 
 
