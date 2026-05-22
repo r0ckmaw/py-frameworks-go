@@ -6,12 +6,12 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.136.1",
+    "passlib[bcrypt]>=1.7.4",
     "psycopg[binary]>=3.3.4",
+    "python-jose[cryptography]>=3.5.0",
     "requests>=2.34.2",
-    "ruff>=0.15.14",
     "sqlalchemy>=2.0.49",
     "sqlalchemy-utils>=0.42.1",
-    "ty>=0.0.38",
     "uvicorn>=0.47.0",
 ]
 
@@ -24,3 +24,9 @@ packages = ["src/household_manager"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.14",
+    "ty>=0.0.38",
+]
