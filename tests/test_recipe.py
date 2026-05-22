@@ -109,6 +109,33 @@ def test_recipe_search():
     print("Verified recipe search")
 
 
+def test_recipe_categories():
+    print("Testing recipe categories...")
+    requests.post(
+        f"{BASE_URL}/recipes/",
+        json={
+            "name": "Oatmeal",
+            "category": "Breakfast",
+            "ingredients": [{"item_name": "Oats", "quantity": 50, "unit": "grams"}],
+        },
+    )
+    requests.post(
+        f"{BASE_URL}/recipes/",
+        json={
+            "name": "Salad",
+            "category": "Lunch",
+            "ingredients": [{"item_name": "Lettuce", "quantity": 1, "unit": "head"}],
+        },
+    )
+
+    # Filter by Breakfast
+    response = requests.get(f"{BASE_URL}/recipes/", params={"category": "Breakfast"})
+    recipes = response.json()
+    assert any(r["name"] == "Oatmeal" for r in recipes)
+    assert all(r["category"] == "Breakfast" for r in recipes)
+    print("Verified recipe category filtering")
+
+
 def test_shopping_list():
     print("Testing shopping list generation...")
     # 1. Create two recipes
@@ -159,4 +186,5 @@ def test_shopping_list():
 if __name__ == "__main__":
     test_recipes()
     test_recipe_search()
+    test_recipe_categories()
     test_shopping_list()

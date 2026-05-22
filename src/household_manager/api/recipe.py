@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from household_manager.database import get_db
 from household_manager.models.inventory import DBInventoryItem
-from household_manager.models.recipe import DBRecipe, DBRecipeIngredient
+from household_manager.models.recipe import DBRecipe, DBRecipeIngredient, RecipeCategory
 from household_manager.schemas.recipe import (
     MissingIngredient,
     Recipe,
@@ -69,7 +69,9 @@ async def create_recipe(recipe: RecipeCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Recipe already exists")
 
-    db_recipe = DBRecipe(name=recipe.name, description=recipe.description)
+    db_recipe = DBRecipe(
+        name=recipe.name, description=recipe.description, category=recipe.category
+    )
     db.add(db_recipe)
     db.flush()  # Get the ID
 
@@ -88,11 +90,17 @@ async def create_recipe(recipe: RecipeCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=List[Recipe])
-async def get_recipes(q: Optional[str] = None, db: Session = Depends(get_db)):
-    """List recipes, optionally filtered by name search."""
+async def get_recipes(
+    q: Optional[str] = None,
+    category: Optional[RecipeCategory] = None,
+    db: Session = Depends(get_db),
+):
+    """List recipes, optionally filtered by name search or category."""
     query = select(DBRecipe)
     if q:
         query = query.where(DBRecipe.name.ilike(f"%{q}%"))
+    if category:
+        query = query.where(DBRecipe.category == category)
     result = db.execute(query)
     return result.scalars().all()
 

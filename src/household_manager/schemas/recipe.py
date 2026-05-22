@@ -2,6 +2,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
+from household_manager.models.recipe import RecipeCategory
+
 
 class RecipeIngredientBase(BaseModel):
     item_name: str
@@ -22,6 +24,7 @@ class RecipeIngredient(RecipeIngredientBase):
 class RecipeBase(BaseModel):
     name: str
     description: Optional[str] = None
+    category: RecipeCategory = RecipeCategory.OTHER
 
 
 class RecipeCreate(RecipeBase):
@@ -30,9 +33,6 @@ class RecipeCreate(RecipeBase):
 
 class Recipe(RecipeBase):
     id: int
-    ingredients: List[RecipeIngredient]
-    model_config = ConfigDict(from_attributes=True)
-
     ingredients: List[RecipeIngredient]
     model_config = ConfigDict(from_attributes=True)
 
