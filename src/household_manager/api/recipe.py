@@ -7,9 +7,57 @@ from sqlalchemy.orm import Session
 from household_manager.database import get_db
 from household_manager.models.inventory import DBInventoryItem
 from household_manager.models.recipe import DBRecipe, DBRecipeIngredient
-from household_manager.schemas.recipe import MissingIngredient, Recipe, RecipeCreate
+from household_manager.schemas.recipe import (
+    MissingIngredient,
+    Recipe,
+    RecipeCreate,
+    ShoppingListItem,
+    ShoppingListRequest,
+)
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
+
+
+@router.post("/shopping-list", response_model=List[ShoppingListItem])
+async def generate_shopping_list(
+    request: ShoppingListRequest, db: Session = Depends(get_db)
+):
+    """Generate a consolidated shopping list for multiple recipes."""
+    total_required = {}  # {item_name: {"quantity": sum, "unit": unit}}
+
+    # 1. Aggregate all requirements
+    for recipe_id in request.recipe_ids:
+        db_recipe = db.get(DBRecipe, recipe_id)
+        if not db_recipe:
+            raise HTTPException(status_code=404, detail=f"Recipe {recipe_id} not found")
+
+        for ing in db_recipe.ingredients:
+            if ing.item_name not in total_required:
+                total_required[ing.item_name] = {"quantity": 0.0, "unit": ing.unit}
+            total_required[ing.item_name]["quantity"] += ing.quantity
+
+    # 2. Subtract current inventory
+    shopping_list = []
+    for item_name, data in total_required.items():
+        total_available = (
+            db.execute(
+                select(func.sum(DBInventoryItem.quantity)).where(
+                    DBInventoryItem.name == item_name
+                )
+            ).scalar()
+            or 0.0
+        )
+
+        if total_available < data["quantity"]:
+            shopping_list.append(
+                ShoppingListItem(
+                    item_name=item_name,
+                    quantity_to_buy=data["quantity"] - total_available,
+                    unit=data["unit"],
+                )
+            )
+
+    return shopping_list
 
 
 @router.post("/", response_model=Recipe)

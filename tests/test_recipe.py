@@ -109,6 +109,54 @@ def test_recipe_search():
     print("Verified recipe search")
 
 
+def test_shopping_list():
+    print("Testing shopping list generation...")
+    # 1. Create two recipes
+    r1 = requests.post(
+        f"{BASE_URL}/recipes/",
+        json={
+            "name": "Tea",
+            "ingredients": [
+                {"item_name": "Water", "quantity": 0.3, "unit": "liters"},
+                {"item_name": "Tea Bag", "quantity": 1, "unit": "piece"},
+            ],
+        },
+    ).json()
+
+    r2 = requests.post(
+        f"{BASE_URL}/recipes/",
+        json={
+            "name": "Coffee",
+            "ingredients": [
+                {"item_name": "Water", "quantity": 0.2, "unit": "liters"},
+                {"item_name": "Coffee Beans", "quantity": 15, "unit": "grams"},
+            ],
+        },
+    ).json()
+
+    # 2. Add some inventory (not enough water, no coffee/tea)
+    requests.post(
+        f"{BASE_URL}/item", json={"name": "Water", "quantity": 0.1, "unit": "liters"}
+    )
+
+    # 3. Generate shopping list for both
+    response = requests.post(
+        f"{BASE_URL}/recipes/shopping-list", json={"recipe_ids": [r1["id"], r2["id"]]}
+    )
+    assert response.status_code == 200
+    shopping_list = response.json()
+
+    # Expecting:
+    # Water: 0.3 + 0.2 - 0.1 = 0.4
+    # Tea Bag: 1
+    # Coffee Beans: 15
+    assert len(shopping_list) == 3
+    water = next(item for item in shopping_list if item["item_name"] == "Water")
+    assert water["quantity_to_buy"] == 0.4
+    print("Verified shopping list aggregation and inventory deduction")
+
+
 if __name__ == "__main__":
     test_recipes()
     test_recipe_search()
+    test_shopping_list()

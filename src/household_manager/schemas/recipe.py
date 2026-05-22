@@ -43,3 +43,13 @@ class MissingIngredient(BaseModel):
     available_quantity: float
     unit: str
     missing_quantity: float
+
+
+class ShoppingListRequest(BaseModel):
+    recipe_ids: List[int]
+
+
+class ShoppingListItem(BaseModel):
+    item_name: str
+    quantity_to_buy: float
+    unit: str
