@@ -1,14 +1,16 @@
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from models import Category, InventoryItem, InventoryItemCreate
+from database import Base, engine, get_db
+from models import Category, DBInventoryItem, InventoryItem, InventoryItemCreate
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Household Manager")
-
-# In-memory storage for demonstration
-inventory_db: List[InventoryItem] = []
-id_counter = 1
 
 
 @app.get("/")
@@ -17,42 +19,54 @@ async def root():
 
 
 @app.post("/items/", response_model=InventoryItem)
-async def create_item(item: InventoryItemCreate):
-    global id_counter
-    new_item = InventoryItem(id=id_counter, **item.model_dump())
-    inventory_db.append(new_item)
-    id_counter += 1
-    return new_item
+async def create_item(item: InventoryItemCreate, db: Session = Depends(get_db)):
+    db_item = DBInventoryItem(**item.model_dump())
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
 
 
 @app.get("/items/", response_model=List[InventoryItem])
-async def get_items(category: Optional[Category] = None):
+async def get_items(category: Optional[Category] = None, db: Session = Depends(get_db)):
+    query = select(DBInventoryItem)
     if category:
-        return [item for item in inventory_db if item.category == category]
-    return inventory_db
+        query = query.where(DBInventoryItem.category == category)
+    result = db.execute(query)
+    return result.scalars().all()
 
 
 @app.get("/items/{item_id}", response_model=InventoryItem)
-async def get_item(item_id: int):
-    for item in inventory_db:
-        if item.id == item_id:
-            return item
-    raise HTTPException(status_code=404, detail="Item not found")
+async def get_item(item_id: int, db: Session = Depends(get_db)):
+    db_item = db.get(DBInventoryItem, item_id)
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return db_item
 
 
 @app.put("/items/{item_id}", response_model=InventoryItem)
-async def update_item(item_id: int, updated_item: InventoryItemCreate):
-    for i, item in enumerate(inventory_db):
-        if item.id == item_id:
-            inventory_db[i] = InventoryItem(id=item_id, **updated_item.model_dump())
-            return inventory_db[i]
-    raise HTTPException(status_code=404, detail="Item not found")
+async def update_item(
+    item_id: int, updated_item: InventoryItemCreate, db: Session = Depends(get_db)
+):
+    db_item = db.get(DBInventoryItem, item_id)
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    item_data = updated_item.model_dump()
+    for key, value in item_data.items():
+        setattr(db_item, key, value)
+
+    db.commit()
+    db.refresh(db_item)
+    return db_item
 
 
 @app.delete("/items/{item_id}")
-async def delete_item(item_id: int):
-    for i, item in enumerate(inventory_db):
-        if item.id == item_id:
-            del inventory_db[i]
-            return {"message": "Item deleted"}
-    raise HTTPException(status_code=404, detail="Item not found")
+async def delete_item(item_id: int, db: Session = Depends(get_db)):
+    db_item = db.get(DBInventoryItem, item_id)
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    db.delete(db_item)
+    db.commit()
+    return {"message": "Item deleted"}
