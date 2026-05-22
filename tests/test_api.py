@@ -126,7 +126,35 @@ def test_intelligence():
     print("Verified expiration alerts")
 
 
+def test_batch_and_consumption():
+    print("Testing batch and consumption...")
+    # 1. Batch upload
+    batch_data = [
+        {"name": "Bread", "quantity": 2, "unit": "loaves", "category": "Pantry"},
+        {"name": "Butter", "quantity": 1, "unit": "pack", "category": "Dairy"},
+    ]
+    response = requests.post(f"{BASE_URL}/batch", json=batch_data)
+    assert response.status_code == 200
+    items = response.json()
+    assert len(items) == 2
+    bread_id = next(item["id"] for item in items if item["name"] == "Bread")
+    print("Verified batch upload")
+
+    # 2. Consumption (Successful)
+    response = requests.patch(f"{BASE_URL}/{bread_id}/consume", params={"amount": 1})
+    assert response.status_code == 200
+    assert response.json()["quantity"] == 1
+    print("Verified successful consumption")
+
+    # 3. Consumption (Failure - Too much)
+    response = requests.patch(f"{BASE_URL}/{bread_id}/consume", params={"amount": 5})
+    assert response.status_code == 400
+    assert "Not enough quantity" in response.json()["detail"]
+    print("Verified consumption safety check (prevent negative)")
+
+
 if __name__ == "__main__":
     test_crud()
     test_filtering()
     test_intelligence()
+    test_batch_and_consumption()

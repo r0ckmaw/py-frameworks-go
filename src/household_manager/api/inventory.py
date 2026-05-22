@@ -52,6 +52,40 @@ async def get_low_stock_items(db: Session = Depends(get_db)):
     return result.scalars().all()
 
 
+@router.post("/batch", response_model=List[InventoryItem])
+async def create_items_batch(
+    items: List[InventoryItemCreate], db: Session = Depends(get_db)
+):
+    """Create multiple items at once."""
+    db_items = [DBInventoryItem(**item.model_dump()) for item in items]
+    db.add_all(db_items)
+    db.commit()
+    for item in db_items:
+        db.refresh(item)
+    return db_items
+
+
+@router.patch("/{item_id}/consume", response_model=InventoryItem)
+async def consume_item(
+    item_id: int, amount: float = 1.0, db: Session = Depends(get_db)
+):
+    """Consume a certain amount of an item. Prevents negative quantity."""
+    db_item = db.get(DBInventoryItem, item_id)
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    if db_item.quantity < amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Not enough quantity. Available: {db_item.quantity}, Requested: {amount}",
+        )
+
+    db_item.quantity -= amount
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+
 @router.get("/{item_id}", response_model=InventoryItem)
 async def get_item(item_id: int, db: Session = Depends(get_db)):
     db_item = db.get(DBInventoryItem, item_id)
