@@ -4,9 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from household_manager.core.deps import get_current_user
 from household_manager.database import get_db
 from household_manager.models.inventory import DBInventoryItem
 from household_manager.models.recipe import DBRecipe, DBRecipeIngredient, RecipeCategory
+from household_manager.models.user import DBUser
 from household_manager.schemas.recipe import (
     MissingIngredient,
     Recipe,
@@ -20,7 +22,9 @@ router = APIRouter(prefix="/recipes", tags=["recipes"])
 
 @router.post("/shopping-list", response_model=List[ShoppingListItem])
 async def generate_shopping_list(
-    request: ShoppingListRequest, db: Session = Depends(get_db)
+    request: ShoppingListRequest,
+    db: Session = Depends(get_db),
+    current_user: DBUser = Depends(get_current_user),
 ):
     """Generate a consolidated shopping list for multiple recipes."""
     total_required = {}  # {item_name: {"quantity": sum, "unit": unit}}
@@ -28,7 +32,7 @@ async def generate_shopping_list(
     # 1. Aggregate all requirements
     for recipe_id in request.recipe_ids:
         db_recipe = db.get(DBRecipe, recipe_id)
-        if not db_recipe:
+        if not db_recipe or db_recipe.owner_id != current_user.id:
             raise HTTPException(status_code=404, detail=f"Recipe {recipe_id} not found")
 
         for ing in db_recipe.ingredients:
@@ -42,7 +46,8 @@ async def generate_shopping_list(
         total_available = (
             db.execute(
                 select(func.sum(DBInventoryItem.quantity)).where(
-                    DBInventoryItem.name == item_name
+                    DBInventoryItem.name == item_name,
+                    DBInventoryItem.owner_id == current_user.id,
                 )
             ).scalar()
             or 0.0
@@ -61,16 +66,26 @@ async def generate_shopping_list(
 
 
 @router.post("/", response_model=Recipe)
-async def create_recipe(recipe: RecipeCreate, db: Session = Depends(get_db)):
+async def create_recipe(
+    recipe: RecipeCreate,
+    db: Session = Depends(get_db),
+    current_user: DBUser = Depends(get_current_user),
+):
     # Check if recipe already exists
     existing = db.execute(
-        select(DBRecipe).where(DBRecipe.name == recipe.name)
+        select(DBRecipe).where(
+            DBRecipe.name == recipe.name,
+            DBRecipe.owner_id == current_user.id,
+        )
     ).scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=400, detail="Recipe already exists")
 
     db_recipe = DBRecipe(
-        name=recipe.name, description=recipe.description, category=recipe.category
+        name=recipe.name,
+        description=recipe.description,
+        category=recipe.category,
+        owner_id=current_user.id,
     )
     db.add(db_recipe)
     db.flush()  # Get the ID
@@ -94,9 +109,10 @@ async def get_recipes(
     q: Optional[str] = None,
     category: Optional[RecipeCategory] = None,
     db: Session = Depends(get_db),
+    current_user: DBUser = Depends(get_current_user),
 ):
     """List recipes, optionally filtered by name search or category."""
-    query = select(DBRecipe)
+    query = select(DBRecipe).where(DBRecipe.owner_id == current_user.id)
     if q:
         query = query.where(DBRecipe.name.ilike(f"%{q}%"))
     if category:
@@ -106,18 +122,26 @@ async def get_recipes(
 
 
 @router.get("/{recipe_id}", response_model=Recipe)
-async def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
+async def get_recipe(
+    recipe_id: int,
+    db: Session = Depends(get_db),
+    current_user: DBUser = Depends(get_current_user),
+):
     db_recipe = db.get(DBRecipe, recipe_id)
-    if not db_recipe:
+    if not db_recipe or db_recipe.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Recipe not found")
     return db_recipe
 
 
 @router.get("/{recipe_id}/missing", response_model=List[MissingIngredient])
-async def get_missing_ingredients(recipe_id: int, db: Session = Depends(get_db)):
+async def get_missing_ingredients(
+    recipe_id: int,
+    db: Session = Depends(get_db),
+    current_user: DBUser = Depends(get_current_user),
+):
     """Calculate what ingredients are missing for a specific recipe."""
     db_recipe = db.get(DBRecipe, recipe_id)
-    if not db_recipe:
+    if not db_recipe or db_recipe.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     missing = []
@@ -126,7 +150,8 @@ async def get_missing_ingredients(recipe_id: int, db: Session = Depends(get_db))
         total_available = (
             db.execute(
                 select(func.sum(DBInventoryItem.quantity)).where(
-                    DBInventoryItem.name == ing.item_name
+                    DBInventoryItem.name == ing.item_name,
+                    DBInventoryItem.owner_id == current_user.id,
                 )
             ).scalar()
             or 0.0
@@ -147,17 +172,21 @@ async def get_missing_ingredients(recipe_id: int, db: Session = Depends(get_db))
 
 
 @router.post("/{recipe_id}/cook", response_model=dict)
-async def cook_recipe(recipe_id: int, db: Session = Depends(get_db)):
+async def cook_recipe(
+    recipe_id: int,
+    db: Session = Depends(get_db),
+    current_user: DBUser = Depends(get_current_user),
+):
     """
     Cook a recipe: deduct ingredients from inventory.
     Uses FEFO (First Expiring, First Out) logic.
     """
     db_recipe = db.get(DBRecipe, recipe_id)
-    if not db_recipe:
+    if not db_recipe or db_recipe.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     # 1. Validation: Check if we have enough of everything first
-    missing = await get_missing_ingredients(recipe_id, db)
+    missing = await get_missing_ingredients(recipe_id, db, current_user)
     if missing:
         raise HTTPException(
             status_code=400,
@@ -175,7 +204,10 @@ async def cook_recipe(recipe_id: int, db: Session = Depends(get_db)):
         # ordered by expiration date (Nulls last)
         items_query = (
             select(DBInventoryItem)
-            .where(DBInventoryItem.name == ing.item_name)
+            .where(
+                DBInventoryItem.name == ing.item_name,
+                DBInventoryItem.owner_id == current_user.id,
+            )
             .order_by(DBInventoryItem.expiration_date.asc().nulls_last())
         )
         inventory_items = db.execute(items_query).scalars().all()

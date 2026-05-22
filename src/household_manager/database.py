@@ -1,8 +1,10 @@
 import os
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
+load_dotenv()
 # Default to SQLite, but allow override via environment variable for Postgres
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./household.db")
 

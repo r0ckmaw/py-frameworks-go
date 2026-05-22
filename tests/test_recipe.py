@@ -5,8 +5,31 @@ import requests
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 
 
+def auth_headers(username: str = "recipe_user", password: str = "demo123") -> dict:
+    login = requests.post(
+        f"{BASE_URL}/auth/login",
+        json={"username": username, "password": password},
+    )
+
+    if login.status_code != 200:
+        register = requests.post(
+            f"{BASE_URL}/auth/register",
+            json={"username": username, "password": password},
+        )
+        assert register.status_code in (200, 400), register.text
+        login = requests.post(
+            f"{BASE_URL}/auth/login",
+            json={"username": username, "password": password},
+        )
+
+    assert login.status_code == 200, login.text
+    token = login.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_recipes():
     print("Testing Recipes...")
+    headers = auth_headers("recipe_flow_user")
 
     # 1. Create a recipe
     recipe_data = {
@@ -18,14 +41,14 @@ def test_recipes():
             {"item_name": "Flour", "quantity": 250, "unit": "grams"},
         ],
     }
-    response = requests.post(f"{BASE_URL}/recipes/", json=recipe_data)
+    response = requests.post(f"{BASE_URL}/recipes/", json=recipe_data, headers=headers)
     assert response.status_code == 200
     recipe = response.json()
     recipe_id = recipe["id"]
     print(f"Created recipe '{recipe['name']}' with ID: {recipe_id}")
 
     # 2. Check missing ingredients (should be all of them)
-    response = requests.get(f"{BASE_URL}/recipes/{recipe_id}/missing")
+    response = requests.get(f"{BASE_URL}/recipes/{recipe_id}/missing", headers=headers)
     assert response.status_code == 200
     missing = response.json()
     assert len(missing) == 3
@@ -35,25 +58,24 @@ def test_recipes():
     requests.post(
         f"{BASE_URL}/item",
         json={"name": "Milk", "quantity": 1.0, "unit": "liters", "category": "Dairy"},
+        headers=headers,
     )
     requests.post(
         f"{BASE_URL}/item",
         json={"name": "Eggs", "quantity": 1, "unit": "pieces", "category": "Dairy"},
+        headers=headers,
     )
 
     # 4. Check missing again
-    response = requests.get(f"{BASE_URL}/recipes/{recipe_id}/missing")
+    response = requests.get(f"{BASE_URL}/recipes/{recipe_id}/missing", headers=headers)
     missing = response.json()
-    # Milk should be gone (have 1.0, need 0.5)
-    # Eggs should still be there (have 1, need 2)
-    # Flour should still be there (have 0, need 250)
     assert len(missing) == 2
     egg_missing = next(m for m in missing if m["item_name"] == "Eggs")
     assert egg_missing["missing_quantity"] == 1.0
     print("Verified partial ingredient availability logic")
 
     # 5. Cook recipe (Failure expected)
-    response = requests.post(f"{BASE_URL}/recipes/{recipe_id}/cook")
+    response = requests.post(f"{BASE_URL}/recipes/{recipe_id}/cook", headers=headers)
     assert response.status_code == 400
     assert "Insufficient ingredients" in response.json()["detail"]["message"]
     print("Verified cook recipe failure when ingredients are missing")
@@ -62,20 +84,21 @@ def test_recipes():
     requests.post(
         f"{BASE_URL}/item",
         json={"name": "Eggs", "quantity": 5, "unit": "pieces", "category": "Dairy"},
+        headers=headers,
     )
     requests.post(
         f"{BASE_URL}/item",
         json={"name": "Flour", "quantity": 1000, "unit": "grams", "category": "Pantry"},
+        headers=headers,
     )
 
-    response = requests.post(f"{BASE_URL}/recipes/{recipe_id}/cook")
+    response = requests.post(f"{BASE_URL}/recipes/{recipe_id}/cook", headers=headers)
     assert response.status_code == 200
     assert "Successfully cooked" in response.json()["message"]
     print("Verified successful recipe cooking")
 
     # 7. Verify inventory deduction
-    # We had 1.0 + 5.0 eggs = 6.0. Recipe used 2.0. Should have 4.0 left.
-    response = requests.get(f"{BASE_URL}/items")
+    response = requests.get(f"{BASE_URL}/items", headers=headers)
     items = response.json()
     total_eggs = sum(item["quantity"] for item in items if item["name"] == "Eggs")
     assert total_eggs == 4.0
@@ -84,6 +107,8 @@ def test_recipes():
 
 def test_recipe_search():
     print("Testing recipe search...")
+    headers = auth_headers("recipe_search_user")
+
     requests.post(
         f"{BASE_URL}/recipes/",
         json={
@@ -91,6 +116,7 @@ def test_recipe_search():
             "description": "Classic pizza",
             "ingredients": [{"item_name": "Dough", "quantity": 1, "unit": "piece"}],
         },
+        headers=headers,
     )
     requests.post(
         f"{BASE_URL}/recipes/",
@@ -99,10 +125,12 @@ def test_recipe_search():
             "description": "Healthy pizza",
             "ingredients": [{"item_name": "Dough", "quantity": 1, "unit": "piece"}],
         },
+        headers=headers,
     )
 
-    # Search for 'pizza'
-    response = requests.get(f"{BASE_URL}/recipes/", params={"q": "pizza"})
+    response = requests.get(
+        f"{BASE_URL}/recipes/", params={"q": "pizza"}, headers=headers
+    )
     recipes = response.json()
     assert len(recipes) == 2
     assert all("Pizza" in r["name"] for r in recipes)
@@ -111,6 +139,8 @@ def test_recipe_search():
 
 def test_recipe_categories():
     print("Testing recipe categories...")
+    headers = auth_headers("recipe_cat_user")
+
     requests.post(
         f"{BASE_URL}/recipes/",
         json={
@@ -118,6 +148,7 @@ def test_recipe_categories():
             "category": "Breakfast",
             "ingredients": [{"item_name": "Oats", "quantity": 50, "unit": "grams"}],
         },
+        headers=headers,
     )
     requests.post(
         f"{BASE_URL}/recipes/",
@@ -126,10 +157,12 @@ def test_recipe_categories():
             "category": "Lunch",
             "ingredients": [{"item_name": "Lettuce", "quantity": 1, "unit": "head"}],
         },
+        headers=headers,
     )
 
-    # Filter by Breakfast
-    response = requests.get(f"{BASE_URL}/recipes/", params={"category": "Breakfast"})
+    response = requests.get(
+        f"{BASE_URL}/recipes/", params={"category": "Breakfast"}, headers=headers
+    )
     recipes = response.json()
     assert any(r["name"] == "Oatmeal" for r in recipes)
     assert all(r["category"] == "Breakfast" for r in recipes)
@@ -138,7 +171,8 @@ def test_recipe_categories():
 
 def test_shopping_list():
     print("Testing shopping list generation...")
-    # 1. Create two recipes
+    headers = auth_headers("shopping_user")
+
     r1 = requests.post(
         f"{BASE_URL}/recipes/",
         json={
@@ -148,6 +182,7 @@ def test_shopping_list():
                 {"item_name": "Tea Bag", "quantity": 1, "unit": "piece"},
             ],
         },
+        headers=headers,
     ).json()
 
     r2 = requests.post(
@@ -159,28 +194,70 @@ def test_shopping_list():
                 {"item_name": "Coffee Beans", "quantity": 15, "unit": "grams"},
             ],
         },
+        headers=headers,
     ).json()
 
-    # 2. Add some inventory (not enough water, no coffee/tea)
     requests.post(
-        f"{BASE_URL}/item", json={"name": "Water", "quantity": 0.1, "unit": "liters"}
+        f"{BASE_URL}/item",
+        json={"name": "Water", "quantity": 0.1, "unit": "liters"},
+        headers=headers,
     )
 
-    # 3. Generate shopping list for both
     response = requests.post(
-        f"{BASE_URL}/recipes/shopping-list", json={"recipe_ids": [r1["id"], r2["id"]]}
+        f"{BASE_URL}/recipes/shopping-list",
+        json={"recipe_ids": [r1["id"], r2["id"]]},
+        headers=headers,
     )
     assert response.status_code == 200
     shopping_list = response.json()
 
-    # Expecting:
-    # Water: 0.3 + 0.2 - 0.1 = 0.4
-    # Tea Bag: 1
-    # Coffee Beans: 15
     assert len(shopping_list) == 3
     water = next(item for item in shopping_list if item["item_name"] == "Water")
     assert water["quantity_to_buy"] == 0.4
     print("Verified shopping list aggregation and inventory deduction")
+
+
+def test_user_isolation_recipe():
+    print("Testing recipe user isolation...")
+    headers_a = auth_headers("recipe_iso_a")
+    headers_b = auth_headers("recipe_iso_b")
+
+    r = requests.post(
+        f"{BASE_URL}/recipes/",
+        json={
+            "name": "Secret Recipe",
+            "ingredients": [{"item_name": "Salt", "quantity": 1, "unit": "tsp"}],
+        },
+        headers=headers_a,
+    )
+    assert r.status_code == 200
+    recipe_id = r.json()["id"]
+
+    list_b = requests.get(f"{BASE_URL}/recipes/", headers=headers_b)
+    assert list_b.status_code == 200
+    assert all(recipe["id"] != recipe_id for recipe in list_b.json())
+
+    get_b = requests.get(f"{BASE_URL}/recipes/{recipe_id}", headers=headers_b)
+    assert get_b.status_code == 404
+    print("Verified recipe isolation")
+
+
+def test_same_recipe_name_different_users():
+    print("Testing same recipe name allowed for different users...")
+    headers_a = auth_headers("dupe_user_a")
+    headers_b = auth_headers("dupe_user_b")
+
+    payload = {
+        "name": "Shared Name",
+        "ingredients": [{"item_name": "Flour", "quantity": 100, "unit": "grams"}],
+    }
+
+    r1 = requests.post(f"{BASE_URL}/recipes/", json=payload, headers=headers_a)
+    r2 = requests.post(f"{BASE_URL}/recipes/", json=payload, headers=headers_b)
+
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    print("Verified per-user recipe name uniqueness")
 
 
 if __name__ == "__main__":
@@ -188,3 +265,5 @@ if __name__ == "__main__":
     test_recipe_search()
     test_recipe_categories()
     test_shopping_list()
+    test_user_isolation_recipe()
+    test_same_recipe_name_different_users()

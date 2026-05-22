@@ -10,6 +10,7 @@ A modern FastAPI-based webserver for managing household inventory and recipes. B
 - **Intelligent Cooking**: "Cook Recipe" feature that automatically deducts ingredients using FEFO (First Expiring, First Out) logic.
 - **Shopping List Generator**: Consolidate missing ingredients from multiple recipes into a single shopping list.
 - **Search**: Case-insensitive search for both items and recipes.
+- **Authentication**: JWT-based user registration/login with per-user data isolation.
 - **Modern Tooling**: Linting with `ruff` and type checking with `ty`.
 
 ## Prerequisites
@@ -44,6 +45,30 @@ PYTHONPATH=src uv run uvicorn household_manager.main:app --reload
 
 The API will be available at `http://localhost:8000`.
 You can access the interactive Swagger documentation at `http://localhost:8000/docs`.
+
+### Authentication flow
+
+1. Register:
+   ```bash
+   curl -X POST http://localhost:8000/auth/register \
+     -H "Content-Type: application/json" \
+     -d '{"username":"demo","password":"demo123"}'
+   ```
+
+2. Login and obtain JWT token:
+   ```bash
+   curl -X POST http://localhost:8000/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"username":"demo","password":"demo123"}'
+   ```
+
+3. Use the token on protected endpoints:
+   ```bash
+   curl http://localhost:8000/items \
+     -H "Authorization: Bearer <access_token>"
+   ```
+
+All inventory and recipe endpoints are scoped to the authenticated user.
 
 ## Running Tests
 
