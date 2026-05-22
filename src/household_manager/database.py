@@ -1,10 +1,9 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-# Fallback to SQLite if needed, but keeping the structure ready for Postgres
+# Using SQLite for now as a fallback, easily switchable to Postgres
 DATABASE_URL = "sqlite:///./household.db"
 
-# SQLite specific argument: check_same_thread=False
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
