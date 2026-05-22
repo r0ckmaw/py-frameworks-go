@@ -25,7 +25,14 @@ A modern FastAPI-based webserver for managing household inventory and recipes. B
    ```
 
 2. **Database**:
-   By default, the project uses a local SQLite database (`household.db`). A `docker-compose.yml` is provided if you wish to switch to PostgreSQL.
+   By default, the project uses a local SQLite database (`household.db`). 
+   
+   To use **PostgreSQL** (via Docker):
+   1. Start the container: `docker compose up -d`
+   2. Run the server with the database URL:
+      ```bash
+      DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/household_db PYTHONPATH=src uv run uvicorn household_manager.main:app --reload
+      ```
 
 ## Running the Server
 
