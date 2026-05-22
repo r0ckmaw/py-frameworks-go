@@ -82,5 +82,33 @@ def test_recipes():
     print("Verified inventory correctly deducted after cooking")
 
 
+def test_recipe_search():
+    print("Testing recipe search...")
+    requests.post(
+        f"{BASE_URL}/recipes/",
+        json={
+            "name": "Pepperoni Pizza",
+            "description": "Classic pizza",
+            "ingredients": [{"item_name": "Dough", "quantity": 1, "unit": "piece"}],
+        },
+    )
+    requests.post(
+        f"{BASE_URL}/recipes/",
+        json={
+            "name": "Veggie Pizza",
+            "description": "Healthy pizza",
+            "ingredients": [{"item_name": "Dough", "quantity": 1, "unit": "piece"}],
+        },
+    )
+
+    # Search for 'pizza'
+    response = requests.get(f"{BASE_URL}/recipes/", params={"q": "pizza"})
+    recipes = response.json()
+    assert len(recipes) == 2
+    assert all("Pizza" in r["name"] for r in recipes)
+    print("Verified recipe search")
+
+
 if __name__ == "__main__":
     test_recipes()
+    test_recipe_search()

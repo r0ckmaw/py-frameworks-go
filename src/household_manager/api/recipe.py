@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
@@ -40,8 +40,12 @@ async def create_recipe(recipe: RecipeCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=List[Recipe])
-async def get_recipes(db: Session = Depends(get_db)):
-    result = db.execute(select(DBRecipe))
+async def get_recipes(q: Optional[str] = None, db: Session = Depends(get_db)):
+    """List recipes, optionally filtered by name search."""
+    query = select(DBRecipe)
+    if q:
+        query = query.where(DBRecipe.name.ilike(f"%{q}%"))
+    result = db.execute(query)
     return result.scalars().all()
 
 

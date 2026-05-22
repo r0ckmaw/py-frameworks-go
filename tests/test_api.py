@@ -88,7 +88,7 @@ def test_intelligence():
     requests.post(
         f"{BASE_URL}/item",
         json={
-            "name": "Milk",
+            "name": "Milk Intelligence",
             "quantity": 1,
             "min_quantity": 2,
             "unit": "liters",
@@ -98,7 +98,7 @@ def test_intelligence():
     response = requests.get(f"{BASE_URL}/items/low-stock")
     assert response.status_code == 200
     items = response.json()
-    assert any(item["name"] == "Milk" for item in items)
+    assert any(item["name"] == "Milk Intelligence" for item in items)
     print("Verified low-stock detection")
 
     # 2. Test Expiring
@@ -106,7 +106,7 @@ def test_intelligence():
     requests.post(
         f"{BASE_URL}/item",
         json={
-            "name": "Eggs",
+            "name": "Eggs Intelligence",
             "quantity": 12,
             "unit": "pieces",
             "category": "Dairy",
@@ -117,13 +117,13 @@ def test_intelligence():
     response = requests.get(f"{BASE_URL}/items/expiring")
     assert response.status_code == 200
     items = response.json()
-    assert any(item["name"] == "Eggs" for item in items)
+    assert any(item["name"] == "Eggs Intelligence" for item in items)
 
     # This should NOT be caught by a 1 day filter
     response = requests.get(f"{BASE_URL}/items/expiring", params={"days": 1})
     assert response.status_code == 200
     items = response.json()
-    assert not any(item["name"] == "Eggs" for item in items)
+    assert not any(item["name"] == "Eggs Intelligence" for item in items)
     print("Verified expiration alerts")
 
 
@@ -131,14 +131,14 @@ def test_batch_and_consumption():
     print("Testing batch and consumption...")
     # 1. Batch upload
     batch_data = [
-        {"name": "Bread", "quantity": 2, "unit": "loaves", "category": "Pantry"},
-        {"name": "Butter", "quantity": 1, "unit": "pack", "category": "Dairy"},
+        {"name": "Bread Batch", "quantity": 2, "unit": "loaves", "category": "Pantry"},
+        {"name": "Butter Batch", "quantity": 1, "unit": "pack", "category": "Dairy"},
     ]
     response = requests.post(f"{BASE_URL}/items", json=batch_data)
     assert response.status_code == 200
     items = response.json()
     assert len(items) == 2
-    bread_id = next(item["id"] for item in items if item["name"] == "Bread")
+    bread_id = next(item["id"] for item in items if item["name"] == "Bread Batch")
     print("Verified batch upload")
 
     # 2. Consumption (Successful)
@@ -158,8 +158,37 @@ def test_batch_and_consumption():
     print("Verified consumption safety check (prevent negative)")
 
 
+def test_search():
+    print("Testing inventory search...")
+    requests.post(
+        f"{BASE_URL}/item",
+        json={"name": "Search Whole Milk", "quantity": 1, "unit": "liters"},
+    )
+    requests.post(
+        f"{BASE_URL}/item",
+        json={"name": "Search Oat Milk", "quantity": 1, "unit": "liters"},
+    )
+    requests.post(
+        f"{BASE_URL}/item", json={"name": "Search Bread", "quantity": 1, "unit": "loaf"}
+    )
+
+    # Search for 'search' (case-insensitive)
+    response = requests.get(f"{BASE_URL}/items", params={"q": "search"})
+    items = response.json()
+    assert len(items) == 3
+    assert all("Search" in item["name"] for item in items)
+
+    # Search for 'milk'
+    response = requests.get(f"{BASE_URL}/items", params={"q": "milk"})
+    items = response.json()
+    # Should find 'Search Whole Milk', 'Search Oat Milk', AND 'Milk Intelligence'
+    assert len(items) == 3
+    print("Verified inventory search")
+
+
 if __name__ == "__main__":
     test_crud()
     test_filtering()
     test_intelligence()
     test_batch_and_consumption()
+    test_search()

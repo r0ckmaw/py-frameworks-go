@@ -36,11 +36,17 @@ async def create_items_batch(
 
 
 @router.get("/items", response_model=List[InventoryItem])
-async def get_items(category: Optional[Category] = None, db: Session = Depends(get_db)):
-    """List items, optionally filtered by category."""
+async def get_items(
+    category: Optional[Category] = None,
+    q: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """List items, optionally filtered by category or name search."""
     query = select(DBInventoryItem)
     if category:
         query = query.where(DBInventoryItem.category == category)
+    if q:
+        query = query.where(DBInventoryItem.name.ilike(f"%{q}%"))
     result = db.execute(query)
     return result.scalars().all()
 
