@@ -12,12 +12,15 @@ def test_crud():
         "name": "Milk",
         "quantity": 2.0,
         "unit": "liters",
+        "category": "Dairy",
         "expiration_date": str(date.today() + timedelta(days=7)),
     }
     response = requests.post(f"{BASE_URL}/items/", json=item_data)
     assert response.status_code == 200
     item = response.json()
     assert item["name"] == "Milk"
+    assert item["category"] == "Dairy"
+
     item_id = item["id"]
     print(f"Created item with ID: {item_id}")
 
